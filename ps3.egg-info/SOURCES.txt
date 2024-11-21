@@ -1,3 +1,4 @@
+.coverage
 README.md
 environment.yml
 pyproject.toml
@@ -8,6 +9,7 @@ ps3.egg-info/PKG-INFO
 ps3.egg-info/SOURCES.txt
 ps3.egg-info/dependency_links.txt
 ps3.egg-info/top_level.txt
+ps3/__pycache__/__init__.cpython-312.pyc
 ps3/data/__init__.py
 ps3/data/_load_transform.py
 ps3/data/_sample_split.py

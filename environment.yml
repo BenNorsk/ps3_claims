@@ -1,4 +1,4 @@
-name: ps3
+name: ps31
 channels:
   - conda-forge
   - nodefaults
