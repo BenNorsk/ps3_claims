@@ -20,8 +20,11 @@ from ps3.data import create_sample_split
     ],
 )
 def test_create_sample_split(df, id_column, training_frac, expected_train_frac_range):
+    # Make the id column the index
+    df = df.set_index(id_column)
+     
     # Apply the function
-    result = create_sample_split(df, id_column, training_frac)
+    result = create_sample_split(df, training_frac)
 
     # Ensure 'sample' column is created
     assert "sample" in result.columns, "'sample' column not found in output DataFrame."

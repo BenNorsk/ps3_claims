@@ -10,7 +10,7 @@ def hash_id(id_value: Union[str, int, float]) -> int:
         return hash_value
 
 
-def create_sample_split(df: pd.DataFrame, id_column: Union[str, int, float], training_frac: float = 0.9) -> pd.DataFrame:
+def create_sample_split(df: pd.DataFrame, training_frac: float = 0.9) -> pd.DataFrame:
     """
     Create sample split based on ID column.
 
@@ -28,7 +28,11 @@ def create_sample_split(df: pd.DataFrame, id_column: Union[str, int, float], tra
     pd.DataFrame
         Training data with sample column containing train/test split based on IDs.
     """
-    hashes = df[id_column].apply(hash_id)
+    hashes = df.index.map(hash_id)
+    # Make the hashes an array
+    hashes = np.array(hashes)
     train_threshold = int(training_frac * 100)
     df['sample'] = np.where(hashes < train_threshold, 'train', 'test')
     return df
+
+

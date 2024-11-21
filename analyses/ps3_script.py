@@ -10,7 +10,6 @@ from sklearn.metrics import auc
 from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, SplineTransformer, StandardScaler
-
 from ps3.data import create_sample_split, load_transform
 
 # %%
