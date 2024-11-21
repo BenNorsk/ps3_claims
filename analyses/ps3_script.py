@@ -27,6 +27,7 @@ df["PurePremium"] = df["ClaimAmountCut"] / df["Exposure"]
 y = df["PurePremium"]
 
 # TODO: Why do you think, we divide by exposure here to arrive at our outcome variable?
+
 #We divide by exposure to get the pure premium, which is the expected claim amount per unit of exposure. 
 
 # TODO: use your create_sample_split function here
@@ -114,18 +115,17 @@ preprocessor = ColumnTransformer(
 )
 preprocessor.set_output(transform="pandas")
 
-model_pipeline = Pipeline([  # Note the square brackets
-    ('preprocessing', preprocessor),
-    ('glm', GeneralizedLinearRegressor(family=TweedieDist, l1_ratio=1, fit_intercept=True))
+model_pipeline = Pipeline([
+    ('preprocessor', preprocessor),
+    ('glm', GeneralizedLinearRegressor(family='tweedie', l1_ratio=1))
 ])
 
-# let's have a look at the pipeline
 model_pipeline
 
-# let's check that the transforms worked
+# checking that the transforms worked
 model_pipeline[:-1].fit_transform(df_train)
 
-model_pipeline.fit(df_train, y_train_t, estimate__sample_weight=w_train_t)
+model_pipeline.fit(df_train, y_train_t, glm__sample_weight=w_train_t)
 
 pd.DataFrame(
     {
@@ -215,15 +215,15 @@ param_grid = {
 cv = GridSearchCV(
     estimator=model_pipeline,
     param_grid=param_grid,
-    scoring='neg_mean_squared_error',  # or another appropriate metric
+    scoring='neg_mean_squared_error', 
     cv=5,  # 5-fold cross-validation
-    n_jobs=-1,  # use all CPU cores
+    n_jobs=-1,
 )
 
-# Fix the sample_weight parameter name
+# Fit GridSearchCV 
 cv.fit(X_train_t, y_train_t, gbm__sample_weight=w_train_t)
 
-# Print best parameters
+# Print the best parameters
 print("Best parameters:", cv.best_params_)
 print("Best score:", cv.best_score_)
 
