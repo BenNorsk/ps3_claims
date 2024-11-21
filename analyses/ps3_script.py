@@ -11,7 +11,10 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, SplineTransformer, StandardScaler
 
-from ps3.data import create_sample_split, load_transform
+#Importing our custom packages
+from ps3.data import load_transform
+from ps3.data._sample_split import create_sample_split
+
 
 # %%
 # load data
@@ -22,11 +25,15 @@ df = load_transform()
 weight = df["Exposure"].values
 df["PurePremium"] = df["ClaimAmountCut"] / df["Exposure"]
 y = df["PurePremium"]
-# TODO: Why do you think, we divide by exposure here to arrive at our outcome variable?
 
+# TODO: Why do you think, we divide by exposure here to arrive at our outcome variable?
+#We divide by exposure to get the pure premium, which is the expected claim amount per unit of exposure. 
 
 # TODO: use your create_sample_split function here
-# df = create_sample_split(...)
+
+
+df = create_sample_split(df, "IDpol") #Using custom package we make split (percent of train) = 0.8
+
 train = np.where(df["sample"] == "train")
 test = np.where(df["sample"] == "test")
 df_train = df.iloc[train].copy()
@@ -86,16 +93,31 @@ print(
 
 # Let's put together a pipeline
 numeric_cols = ["BonusMalus", "Density"]
+
+
+spline_pipe = Pipeline([
+    ('scaler', StandardScaler()),
+    ('spline', SplineTransformer(
+        n_knots=5,
+        degree=3,
+        knots='quantile',
+        include_bias=False  # Ensure we only have one intercept in final GLM
+    ))
+])
+
 preprocessor = ColumnTransformer(
     transformers=[
-        # TODO: Add numeric transforms here
-        ("cat", OneHotEncoder(sparse_output=False, drop="first"), categoricals),
-    ]
+        ('splines', spline_pipe, numeric_cols),
+        ("cat", OneHotEncoder(sparse_output=False, drop="first"), categoricals)
+    ],
+    remainder='passthrough'  # Pass through any other columns unchanged
 )
 preprocessor.set_output(transform="pandas")
-model_pipeline = Pipeline(
-    # TODO: Define pipeline steps here
-)
+
+model_pipeline = Pipeline([  # Note the square brackets
+    ('preprocessing', preprocessor),
+    ('glm', GeneralizedLinearRegressor(family=TweedieDist, l1_ratio=1, fit_intercept=True))
+])
 
 # let's have a look at the pipeline
 model_pipeline
@@ -144,7 +166,23 @@ print(
 # 1: Define the modelling pipeline. Tip: This can simply be a LGBMRegressor based on X_train_t from before.
 # 2. Make sure we are choosing the correct objective for our estimator.
 
-model_pipeline.fit(X_train_t, y_train_t, estimate__sample_weight=w_train_t)
+
+model_pipeline = Pipeline([
+    ('preprocessing', preprocessor),
+    ('gbm', LGBMRegressor(
+        n_estimators=100,
+        learning_rate=0.1,
+        max_depth=5,
+        num_leaves=31,
+        min_child_samples=20,
+        n_jobs=-1,
+        random_state=42,
+        importance_type='gain'
+    ))
+])
+
+
+model_pipeline.fit(X_train_t, y_train_t, gbm__sample_weight=w_train_t)
 df_test["pp_t_lgbm"] = model_pipeline.predict(X_test_t)
 df_train["pp_t_lgbm"] = model_pipeline.predict(X_train_t)
 print(
@@ -167,16 +205,36 @@ print(
 # 1. Define a `GridSearchCV` object with our lgbm pipeline/estimator. Tip: Parameters for a specific step of the pipeline
 # can be passed by <step_name>__param. 
 
+# Define parameter grid for LGBM
+param_grid = {
+    'gbm__learning_rate': [0.01, 0.05, 0.1],
+    'gbm__n_estimators': [100, 200, 300],
+}
+
+# Create GridSearchCV object
+cv = GridSearchCV(
+    estimator=model_pipeline,
+    param_grid=param_grid,
+    scoring='neg_mean_squared_error',  # or another appropriate metric
+    cv=5,  # 5-fold cross-validation
+    n_jobs=-1,  # use all CPU cores
+)
+
+# Fix the sample_weight parameter name
+cv.fit(X_train_t, y_train_t, gbm__sample_weight=w_train_t)
+
+# Print best parameters
+print("Best parameters:", cv.best_params_)
+print("Best score:", cv.best_score_)
+
+# Use best model for predictions
+df_test["pp_t_lgbm"] = cv.best_estimator_.predict(X_test_t)
+df_train["pp_t_lgbm"] = cv.best_estimator_.predict(X_train_t)
+
+
 # Note: Typically we tune many more parameters and larger grids,
 # but to save compute time here, we focus on getting the learning rate
 # and the number of estimators somewhat aligned -> tune learning_rate and n_estimators
-cv = GridSearchCV(
-
-)
-cv.fit(X_train_t, y_train_t, estimate__sample_weight=w_train_t)
-
-df_test["pp_t_lgbm"] = cv.best_estimator_.predict(X_test_t)
-df_train["pp_t_lgbm"] = cv.best_estimator_.predict(X_train_t)
 
 print(
     "training loss t_lgbm:  {}".format(
@@ -219,11 +277,17 @@ def lorenz_curve(y_true, y_pred, exposure):
 
 fig, ax = plt.subplots(figsize=(8, 8))
 
-for label, y_pred in [
-    ("LGBM", df_test["pp_t_lgbm"]),
-    ("GLM Benchmark", df_test["pp_t_glm1"]),
-    ("GLM Splines", df_test["pp_t_glm2"]),
-]:
+# Create a list of available predictions to plot
+predictions_to_plot = []
+if 'pp_t_lgbm' in df_test.columns:
+    predictions_to_plot.append(("LGBM", df_test["pp_t_lgbm"]))
+if 'pp_t_glm1' in df_test.columns:
+    predictions_to_plot.append(("GLM Benchmark", df_test["pp_t_glm1"]))
+if 'pp_t_glm2' in df_test.columns:
+    predictions_to_plot.append(("GLM Splines", df_test["pp_t_glm2"]))
+
+# Plot available predictions
+for label, y_pred in predictions_to_plot:
     ordered_samples, cum_claims = lorenz_curve(
         df_test["PurePremium"], y_pred, df_test["Exposure"]
     )
@@ -247,6 +311,6 @@ ax.set(
     ylabel="Fraction of total claim amount",
 )
 ax.legend(loc="upper left")
-plt.plot()
+plt.show()
 
 # %%
