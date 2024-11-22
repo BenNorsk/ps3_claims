@@ -19,14 +19,6 @@ The solution for exercise 3 is directly appended below.
 
 ## Exercise 3: Feature Engineering and Modelling
 
-Group 3:
-- Benjamin Brückner
-- Jamal Lawal
-- Mengcheng Zhang
-- Haoyuan Jia
-
-The following notebook contains the code/solutions to exercise 3, PS3, D100.
-
 First, we import all our modules.
 
 
